@@ -1,0 +1,124 @@
+# --- Segredos e ambiente ---
+.env
+.env.*
+!.env.example
+auth.json
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*.sqlite
+*.sqlite-journal
+
+# --- Dependencias e build ---
+/vendor
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/public/fonts-manifest.dev.json
+
+# --- Laravel (runtime, cache, sessoes, uploads) ---
+/storage/*.key
+/storage/pail
+/storage/logs
+/storage/framework/cache/data
+/storage/framework/sessions
+/storage/framework/testing
+/storage/framework/views
+/storage/app/public
+/storage/app/private
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+# --- PHP / testes / debug ---
+.phpunit.result.cache
+/.phpunit.cache
+.phpactor.json
+.php-cs-fixer.cache
+.phpstan.cache
+psalm.xml
+_ide_helper.php
+_ide_helper_models.php
+.phpstorm.meta.php
+coverage
+coverage.xml
+clover.xml
+*.cache
+
+# --- Logs e dumps ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Sistema operacional ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# --- IDEs e editores ---
+/.idea
+/.nova
+/.vscode
+/.zed
+/.fleet
+*.swp
+*.swo
+*~
+
+# --- Homestead / Vagrant ---
+Homestead.json
+Homestead.yaml
+/.vagrant
+
+# --- Docker (volumes e overrides locais) ---
+docker-compose.override.yml
+
+# --- Ferramentas de IA ---
+# Claude Code
+.claude/
+CLAUDE.local.md
+
+# Cursor
+.cursor/
+.cursorignore
+.cursorindexingignore
+
+# OpenAI Codex
+.codex/
+
+# Windsurf / Continue / Aider / Cline / Roo
+.windsurf/
+.continue/
+.aider*
+.cline/
+.roo/
+
+# Junie / Amazon Q / Gemini / Kiro / Copilot local
+.junie/
+.amazonq/
+.gemini/
+.kiro/
+.github/copilot/
+
+# Instrucoes de agente geradas por ferramentas
+.agents/
+.opencode/
+.augment/
+.tabnine/
+.codeium/
+.supermaven/
+.pearai/
+.void/
+.idx/
+
+# Arquivos soltos de sessao/contexto de IA
+*.ai.md
+.cursorrules
+.windsurfrules
+GEMINI.md
