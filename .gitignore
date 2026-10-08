@@ -82,7 +82,17 @@ docker-compose.override.yml
 # --- Ferramentas de IA ---
 # Claude Code
 .claude/
+CLAUDE.md
 CLAUDE.local.md
+CLAUDE.*.md
+
+# Instrucoes locais de agentes (inclusive em subdiretorios)
+AGENTS.md
+AGENTS.*.md
+AGENT.md
+.mcp.json
+mcp.local.json
+boost.json
 
 # Cursor
 .cursor/
@@ -122,3 +132,19 @@ CLAUDE.local.md
 .cursorrules
 .windsurfrules
 GEMINI.md
+GEMINI.*.md
+.clinerules
+.clinerules/
+.roorules
+.roorules-*
+.rooignore
+.github/copilot-instructions.md
+.github/instructions/
+.github/agents/
+.github/prompts/
+
+# Metadados locais / temporarios (nao ignorar configuracoes do projeto)
+.history/
+.tmp/
+.temp/
+.cache/
