@@ -234,7 +234,10 @@ class WebbliotecaSyncTest extends TestCase
         WebbliotecaActivity::setEventDispatcher($scoped);
 
         try {
-            app(WebbliotecaService::class)->sync();
+            $this->assertSame(['status' => 'failed', 'count' => 0], app(WebbliotecaService::class)->sync());
+            $lock = Cache::lock('webblioteca:sync:lock', 60);
+            $this->assertTrue($lock->get());
+            $lock->release();
         } finally {
             $scoped->forget($event);
             WebbliotecaActivity::setEventDispatcher($original);
@@ -257,14 +260,17 @@ class WebbliotecaSyncTest extends TestCase
             ->push(['data' => []])]);
         $service = app(WebbliotecaService::class);
 
-        $service->sync();
+        $this->assertSame(['status' => 'synced', 'count' => 1], $service->sync());
         $existing = WebbliotecaActivity::sole()->getAttributes();
-        $service->sync();
+        $this->assertSame(['status' => 'skipped', 'count' => 0], $service->sync());
+        $lock = Cache::lock('webblioteca:sync:lock', 60);
+        $this->assertTrue($lock->get());
+        $lock->release();
         $this->travel(19)->seconds();
-        $service->sync();
+        $this->assertSame(['status' => 'skipped', 'count' => 0], $service->sync());
         Http::assertSentCount(1);
         $this->travel(2)->seconds();
-        $service->sync();
+        $this->assertSame(['status' => 'synced', 'count' => 0], $service->sync());
 
         Http::assertSentCount(2);
         $this->assertDatabaseCount('webblioteca_activities', 1);
@@ -292,6 +298,68 @@ class WebbliotecaSyncTest extends TestCase
         Http::assertSentCount(3);
         $this->assertSame(['0', '50', '75'], Http::recorded()->map(fn ($pair) => $pair[0]['since_id'])->all());
         $this->assertSame(range(1, 75), WebbliotecaActivity::orderBy('external_id')->pluck('external_id')->all());
+    }
+
+    public function test_contended_lock_is_not_released_or_consuming_cooldown(): void
+    {
+        $owner = Cache::lock('webblioteca:sync:lock', 60);
+        $this->assertTrue($owner->get());
+        Http::fake();
+
+        $this->assertSame(['status' => 'skipped', 'count' => 0], app(WebbliotecaService::class)->sync());
+
+        Http::assertNothingSent();
+        $this->assertTrue($owner->isOwnedByCurrentProcess());
+        $this->assertFalse(Cache::has('webblioteca:sync'));
+        $owner->release();
+    }
+
+    public function test_expired_lock_is_not_released_after_another_owner_acquires_it(): void
+    {
+        $this->freezeTime();
+        $replacement = null;
+        Http::fake(function () use (&$replacement) {
+            $this->travel(59)->seconds();
+            $this->assertFalse(Cache::lock('webblioteca:sync:lock', 60)->get());
+            $this->travel(2)->seconds();
+            $replacement = Cache::lock('webblioteca:sync:lock', 60);
+            $this->assertTrue($replacement->get());
+
+            return Http::response(['data' => []]);
+        });
+
+        $this->assertSame(['status' => 'synced', 'count' => 0], app(WebbliotecaService::class)->sync());
+        $this->assertTrue($replacement->isOwnedByCurrentProcess());
+        $replacement->release();
+    }
+
+    public function test_request_failure_returns_failed_and_releases_lock_but_keeps_cooldown(): void
+    {
+        Log::spy();
+        Http::fake([self::ENDPOINT => Http::failedConnection('test-secret-token')]);
+
+        $this->assertSame(['status' => 'failed', 'count' => 0], app(WebbliotecaService::class)->sync());
+        $lock = Cache::lock('webblioteca:sync:lock', 60);
+        $this->assertTrue($lock->get());
+        $lock->release();
+        $this->assertTrue(Cache::has('webblioteca:sync'));
+    }
+
+    public function test_in_flight_request_blocks_sync_even_after_cooldown_expires(): void
+    {
+        $this->freezeTime();
+        Http::fake(function () {
+            $this->travel(21)->seconds();
+            $this->assertSame(['status' => 'skipped', 'count' => 0], app(WebbliotecaService::class)->sync());
+
+            return Http::response(['data' => []]);
+        });
+
+        $this->assertSame(['status' => 'synced', 'count' => 0], app(WebbliotecaService::class)->sync());
+        Http::assertSentCount(1);
+        $lock = Cache::lock('webblioteca:sync:lock', 60);
+        $this->assertTrue($lock->get());
+        $lock->release();
     }
 
     private static function activity(int|string $id, array $overrides = []): array
