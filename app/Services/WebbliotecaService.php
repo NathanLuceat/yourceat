@@ -13,11 +13,17 @@ use UnexpectedValueException;
 
 class WebbliotecaService
 {
-    /** Importa um lote por janela; chamadas seguintes continuam o backlog. */
-    public function sync(): void
+    /**
+     * Importa um lote por janela; chamadas seguintes continuam o backlog.
+     *
+     * @return array{status: 'synced'|'skipped'|'failed', count: int}
+     */
+    public function sync(): array
     {
         $stage = 'configuration';
         $status = null;
+        $lock = null;
+        $acquired = false;
 
         try {
             $url = config('services.webblioteca.url');
@@ -32,8 +38,10 @@ class WebbliotecaService
             }
 
             $stage = 'storage';
-            if (! Cache::add('webblioteca:sync', true, 20)) {
-                return;
+            $lock = Cache::lock('webblioteca:sync:lock', 60);
+            $acquired = $lock->get();
+            if (! $acquired || ! Cache::add('webblioteca:sync', true, 20)) {
+                return ['status' => 'skipped', 'count' => 0];
             }
 
             $sinceId = (string) (WebbliotecaActivity::max('external_id') ?? '0');
@@ -100,9 +108,22 @@ class WebbliotecaService
                     WebbliotecaActivity::updateOrCreate(['external_id' => $id], $row);
                 }
             });
+
+            return ['status' => 'synced', 'count' => count($rows)];
         } catch (\Throwable $e) {
             // Mensagens de exceção HTTP podem conter corpo da resposta e dados pessoais.
             Log::warning('Webblioteca sync failed', ['stage' => $stage, 'http_status' => $status]);
+
+            return ['status' => 'failed', 'count' => 0];
+        } finally {
+            if ($acquired) {
+                try {
+                    // release() verifica o owner, inclusive após expiração e nova aquisição.
+                    $lock->release();
+                } catch (\Throwable $e) {
+                    Log::warning('Webblioteca sync failed', ['stage' => 'lock_release', 'http_status' => null]);
+                }
+            }
         }
     }
 }

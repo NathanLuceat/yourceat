@@ -52,11 +52,11 @@ Decisões técnicas:
 
 - **Autenticação com token:** sem token o GitHub permite 60 requisições por hora; com token, 5.000. Como o token só lê dados públicos, ele não precisa de nenhuma permissão extra.
 - **Cache de 5 minutos:** reduz chamadas repetidas; o consumo varia conforme os repositórios consultados e a documentação aberta pelos visitantes.
-- **Cache em dois níveis:** além da cópia "fresca", guardo uma cópia de 24 horas. Se o GitHub falhar ou o limite estourar, a página serve o último dado bom em vez de quebrar.
+- **Cache em dois níveis:** além da cópia "fresca", guardo uma cópia de 24 horas. Em falhas do GitHub, o último dado bom pode ser usado na geração atual do cache. Uma invalidação por webhook descarta também esse fallback.
 - **Monitoramento do limite:** o cabeçalho `X-RateLimit-Remaining` é lido a cada resposta e gera um aviso no log quando restam poucas requisições.
 - **Commits por repositório:** busco nos repositórios mais recentes em vez de usar o endpoint de eventos, que pode ter atraso.
 - **README sanitizado:** o HTML cru do Markdown é removido antes de renderizar, e protocolos inseguros são bloqueados.
-- **README dos projetos sob demanda:** `GET /projetos/{repo}/readme` só aceita repositórios públicos elegíveis do proprietário configurado. Cache por proprietário/repositório, fallback de 24h, ausência cacheada por 60s e lock para concorrência. A home não busca todos os READMEs.
+- **README dos projetos sob demanda:** `GET /projetos/{repo}/readme` só aceita repositórios públicos elegíveis do proprietário configurado. Cache por proprietário/geração/repositório, fallback de 24h, ausência cacheada por 60s e lock para concorrência. Ao renovar a documentação, o fallback só é permitido se os metadados confirmarem que o repositório continua público; falha nessa verificação deixa a documentação indisponível. A home não busca todos os READMEs.
 - **Documentação navegável:** links e imagens relativos dos projetos são resolvidos pelo AST do CommonMark; âncoras apontam ao GitHub. Conteúdo acima de 512 KiB oferece link para leitura integral, sem truncamento silencioso.
 
 ### API da Webblioteca
@@ -140,6 +140,8 @@ Use a impressão do navegador para salvar em PDF; o currículo ganha fundo branc
 | `GITHUB_USERNAME` | Usuário cujo perfil será exibido |
 | `GITHUB_TOKEN` | Token pessoal do GitHub |
 | `GITHUB_CACHE_TTL` | Tempo de cache em segundos (padrão `300`) |
+| `GITHUB_WEBHOOK_SECRET` | Secret privado exclusivo para validar as entregas do webhook |
+| `GITHUB_WEBHOOK_REPOSITORIES` | Lista autorizada de `proprietário/repositório`, separada por vírgulas; vazia não autoriza entregas |
 | `WEBBLIOTECA_URL` | URL base da API da Webblioteca |
 | `WEBBLIOTECA_TOKEN` | Token de leitura da API da Webblioteca |
 
@@ -161,14 +163,62 @@ resources/views/home.blade.php      # página
 docker/nginx.conf                   # configuração do Nginx
 ```
 
-## Próximos passos
+## Automações e ativação em produção
+
+### Testes no GitHub Actions
+
+O workflow `.github/workflows/tests.yml` executa a suíte em pushes e pull requests, usando PHP 8.4, dependências do `composer.lock`, SQLite em memória e uma chave de aplicação temporária. Não usa banco, tokens ou secrets de produção e não precisa de build Node.
+
+Após enviar o workflow, confira a aba **Actions** do repositório. A execução local dos testes não substitui a confirmação de um run aprovado no GitHub. O workflow testa o código, mas não faz deploy nem configura proteção de branch automaticamente.
+
+### Webhooks do GitHub
+
+O endpoint é `POST https://SEU_DOMINIO/webhooks/github`. Após publicar esta versão, configure no ambiente privado do Laravel Cloud:
+
+- `GITHUB_WEBHOOK_SECRET`: um secret aleatório exclusivo para os webhooks, nunca o token da API. Não cole esse valor em chat, README ou Git.
+- `GITHUB_WEBHOOK_REPOSITORIES`: a lista autorizada, separada por vírgulas: `NathanLuceat/hidrauboa-site,NathanLuceat/webblioteca,NathanLuceat/yourceat,NathanLuceat/NathanLuceat`.
+- `GITHUB_USERNAME`: `NathanLuceat`.
+
+Nos quatro repositórios, acesse **Settings → Webhooks → Add webhook**, informe a URL HTTPS, selecione `application/json`, mantenha a verificação SSL habilitada e informe o mesmo secret privado. Selecione os eventos **Pushes** e **Repositories**. Confira a entrega inicial `ping` e depois uma entrega real na área **Recent Deliveries**.
+
+A autenticação usa HMAC SHA-256 do corpo bruto. A exceção CSRF é restrita ao webhook; as demais rotas não perdem essa proteção. Sem secret ou repositório autorizado, nenhuma invalidação é permitida. O corpo é limitado a 1 MiB e o endpoint possui limite de requisições.
+
+O webhook apenas invalida o cache do proprietário autorizado, sem buscar dados na API durante a entrega. A próxima consulta carrega os dados atualizados; portanto isso não é atualização instantânea de páginas já abertas. A invalidação também descarta o fallback anterior. Uma falha do GitHub logo após o evento pode deixar o conteúdo temporariamente indisponível, em vez de reapresentar dados anteriores à mudança de visibilidade.
+
+Após renomear um repositório, atualize a lista autorizada. Respostas já enviadas não podem ser recolhidas e eventos só têm efeito quando entregues. Entregas repetidas são seguras; acompanhe e reenvie entregas que falharam pelo painel do GitHub.
+
+### Sincronização horária no Laravel Cloud
+
+O comando `php artisan webblioteca:sync` reutiliza a sincronização existente. Sucesso, lote vazio e execução dispensada pelo cooldown/lock retornam código zero; falhas reais retornam código diferente de zero, com mensagem sem credenciais ou conteúdo dos eventos.
+
+Para ativar no Cloud:
+
+1. Confirme banco persistente, migrations existentes aplicadas e as variáveis privadas da Webblioteca.
+2. Use cache compartilhado entre aplicação, scheduler e réplicas, como `CACHE_STORE=database` com a tabela de cache/locks existente. Não use `array` ou cache local por instância em produção.
+3. No **App cluster** do ambiente correto, habilite **Scheduler**, salve e faça redeploy.
+4. Confira `php artisan schedule:list`: a sincronização deve aparecer uma vez por hora.
+5. Para uma verificação manual, execute `php artisan webblioteca:sync` no console do ambiente. Esse comando consulta a API e grava os novos eventos; não é apenas diagnóstico de leitura.
+6. Acompanhe os logs e confirme uma execução horária sem visitas antes de considerar a ativação concluída.
+
+O Cloud invoca `schedule:run` a cada minuto, mas a tarefa só fica devida a cada hora. Não adicione um segundo cron ou worker para a mesma agenda. Localmente, `docker compose exec app php artisan schedule:work` mantém o scheduler em primeiro plano até ser interrompido.
+
+Cada execução importa até 50 eventos. Sem visitantes, isso significa até 50 eventos por hora; um backlog maior continua nas próximas execuções. A sincronização por visitas e o polling permanecem ativos, respeitando o cooldown de 20 segundos. Locks evitam sobreposição e `onOneServer` coordena réplicas via cache compartilhado.
+
+Tarefas agendadas podem despertar um ambiente com Scale-to-Zero e gerar custo de computação. A frequência horária reduz execuções, mas não garante custo zero. Mudanças de agenda exigem novo deploy no Cloud.
+
+Referências: [Scheduler no Laravel Cloud](https://laravel.com/cloud/docs/scheduled-tasks.md) e [validação de webhooks do GitHub](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries).
+
+## Checklist de entrega
 
 - [x] Testes da integração Webblioteca com `Http::fake()` e banco isolado (sem consumir cota das APIs)
 - [x] Testes de READMEs do GitHub com `Http::fake()` (cache, permissões, falhas e sanitização)
-- [ ] GitHub Actions rodando os testes a cada push
+- [x] Workflow GitHub Actions configurado para push e pull request
+- [ ] Confirmar primeiro run aprovado na aba Actions após enviar o workflow
 - [x] Apresentação comercial, README aberto, documentação de projetos e layout responsivo
-- [ ] Webhooks do GitHub para os repositórios principais
-- [ ] Sincronização agendada, independente de visitas
+- [x] Endpoint de webhook autenticado e invalidação de cache implementados e testados
+- [ ] Cadastrar os webhooks nos quatro repositórios e confirmar ping/entregas reais
+- [x] Comando e agenda horária de sincronização, independente de visitas
+- [ ] Habilitar Scheduler no Laravel Cloud e confirmar execução sem visitas
 
 ## Higiene do repositório
 

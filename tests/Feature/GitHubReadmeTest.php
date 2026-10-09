@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\GitHubService;
+use App\Support\GitHubCache;
 use App\Support\GitHubReadmeRenderer;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -199,7 +200,8 @@ class GitHubReadmeTest extends TestCase
     public function test_lock_prevents_duplicate_cold_fetches_and_is_not_released_by_nonowner(): void
     {
         $this->fakeRepos();
-        $key = 'gh:readme-v1:'.hash('sha256', 'Owner/demo').':lock';
+        $cache = app(GitHubCache::class);
+        $key = $cache->key('Owner', $cache->generation('Owner'), 'project-readme:'.hash('sha256', 'demo')).':lock';
         $lock = Cache::lock($key, 30);
         $this->assertTrue($lock->get());
         $this->getJson('/projetos/demo/readme')->assertStatus(503);

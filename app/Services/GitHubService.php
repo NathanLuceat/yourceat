@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\GitHubCache;
 use App\Support\GitHubReadmeRenderer;
 use Closure;
 use Illuminate\Http\Client\Response;
@@ -56,6 +57,9 @@ class GitHubService
         return $this->cached('commits', function () use ($repos, $limit) {
             return collect($this->repos())->take($repos)
                 ->flatMap(function ($repo) {
+                    if (! $this->isPublic($repo['name'])) {
+                        return [];
+                    }
                     $res = $this->request("/repos/{$this->user}/{$repo['name']}/commits", [
                         'author' => $this->user, 'per_page' => 5,
                     ]);
@@ -78,6 +82,9 @@ class GitHubService
     public function profileReadmeHtml(): ?string
     {
         return $this->cached('readme', function () {
+            if (! $this->isPublic($this->user)) {
+                return null;
+            }
             $markdown = $this->request(
                 "/repos/{$this->user}/{$this->user}/readme",
                 accept: 'application/vnd.github.raw+json'
@@ -93,6 +100,11 @@ class GitHubService
 
     public function projectReadme(string $repo): ?array
     {
+        return $this->inGeneration(fn (string $generation) => $this->projectReadmeInGeneration($repo, $generation));
+    }
+
+    private function projectReadmeInGeneration(string $repo, string $generation): ?array
+    {
         if (! preg_match('/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/', $repo)) {
             return null;
         }
@@ -103,8 +115,9 @@ class GitHubService
 
         $url = 'https://github.com/'.rawurlencode($this->user).'/'.rawurlencode($repo).'#readme';
         $unavailable = ['status' => 'unavailable', 'html' => null, 'url' => $url];
-        $key = 'gh:readme-v1:'.hash('sha256', $this->user.'/'.$repo);
+        $key = app(GitHubCache::class)->key($this->user, $generation, 'project-readme:'.hash('sha256', $repo));
         $lock = null;
+        $public = false;
         try {
             if ($fresh = Cache::get($key)) {
                 return $fresh;
@@ -124,6 +137,7 @@ class GitHubService
 
                 return $unavailable;
             }
+            $public = true;
             $response = $this->request("/repos/{$this->user}/{$repo}/readme");
             if ($response->status() === 404) {
                 $missing = ['status' => 'missing', 'html' => null, 'url' => $url];
@@ -160,7 +174,7 @@ class GitHubService
         } catch (Throwable) {
             Log::warning('GitHub README unavailable', ['repo' => $repo]);
 
-            return Cache::get($key.':stale', $unavailable);
+            return $public ? Cache::get($key.':stale', $unavailable) : $unavailable;
         } finally {
             $lock?->release();
         }
@@ -190,22 +204,47 @@ class GitHubService
      */
     private function cached(string $key, Closure $fetch): mixed
     {
-        $fresh = "gh:{$this->user}:{$key}";
+        return $this->inGeneration(function (string $generation) use ($key, $fetch) {
+            $fresh = app(GitHubCache::class)->key($this->user, $generation, $key);
+            if (Cache::has($fresh)) {
+                return Cache::get($fresh);
+            }
+            try {
+                $data = $fetch();
+                Cache::put($fresh, $data, $this->ttl);
+                Cache::put("{$fresh}:stale", $data, now()->addDay());
 
-        if (Cache::has($fresh)) {
-            return Cache::get($fresh);
+                return $data;
+            } catch (Throwable) {
+                Log::warning('GitHub API falhou', ['chave' => $key]);
+
+                return Cache::get("{$fresh}:stale");
+            }
+        });
+    }
+
+    private function inGeneration(Closure $fetch): mixed
+    {
+        $cache = app(GitHubCache::class);
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $generation = $cache->generation($this->user);
+            $result = $fetch($generation);
+            if ($cache->current($this->user, $generation)) {
+                return $result;
+            }
         }
 
+        return null;
+    }
+
+    private function isPublic(string $repo): bool
+    {
         try {
-            $data = $fetch();
-            Cache::put($fresh, $data, $this->ttl);
-            Cache::put("{$fresh}:stale", $data, now()->addDay());
+            $response = $this->request("/repos/{$this->user}/{$repo}");
 
-            return $data;
-        } catch (Throwable $e) {
-            Log::warning('GitHub API falhou', ['chave' => $key]);
-
-            return Cache::get("{$fresh}:stale");
+            return $response->successful() && $response->json('private') === false;
+        } catch (Throwable) {
+            return false;
         }
     }
 }

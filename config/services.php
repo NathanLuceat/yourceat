@@ -28,13 +28,15 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
     'github' => [
-    'username'  => env('GITHUB_USERNAME'),
-    'token'     => env('GITHUB_TOKEN'),
-    'cache_ttl' => (int) env('GITHUB_CACHE_TTL', 300),
+        'username' => env('GITHUB_USERNAME'),
+        'token' => env('GITHUB_TOKEN'),
+        'cache_ttl' => (int) env('GITHUB_CACHE_TTL', 300),
+        'webhook_secret' => env('GITHUB_WEBHOOK_SECRET', ''),
+        'webhook_repositories' => array_values(array_filter(array_map('trim', explode(',', env('GITHUB_WEBHOOK_REPOSITORIES', ''))))),
     ],
     'webblioteca' => [
-    'url'   => env('WEBBLIOTECA_URL'),
-    'token' => env('WEBBLIOTECA_TOKEN'),
+        'url' => env('WEBBLIOTECA_URL'),
+        'token' => env('WEBBLIOTECA_TOKEN'),
     ],
     'slack' => [
         'notifications' => [
