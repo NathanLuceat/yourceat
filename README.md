@@ -1,229 +1,471 @@
 # Yourceat
 
-**Seu programador, a um direct de distância.** Uma apresentação do meu trabalho e das soluções que posso construir para clientes: sites, catálogos, sistemas para processos e integrações. Atuo em Boa Esperança, Santa Rita do Sapucaí e região, com abertura para projetos à distância.
+**Seu programador, a um direct de distância.** Meu portfólio de desenvolvimento: sites, catálogos, sistemas para processos e integrações. Uma apresentação do meu trabalho, com projetos do GitHub e atividades da [Webblioteca](https://webblioteca.laravel.cloud), um sistema de biblioteca que também desenvolvo.
 
-A página reúne meu perfil e meus projetos do GitHub com a atividade recente da [Webblioteca](https://webblioteca.laravel.cloud), um sistema de biblioteca que também é projeto meu.
+- **Site publicado:** [yourceat.laravel.cloud](https://yourceat.laravel.cloud)
+- **Currículo:** [yourceat.laravel.cloud/curriculo](https://yourceat.laravel.cloud/curriculo)
+- **Código:** [NathanLuceat/yourceat](https://github.com/NathanLuceat/yourceat)
 
-O objetivo é prático: **consumir APIs de verdade** (a do GitHub e a da Webblioteca, que eu mesmo construí) e lidar com os problemas reais de quem faz isso, como limite de requisições, cache, falhas externas e privacidade.
+O projeto exercita o consumo de APIs reais, autenticação no servidor, cache, sincronização incremental, tratamento de falhas e privacidade. O frontend usa Blade, CSS e JavaScript puro; não é necessário compilar assets para abrir o portfólio.
 
-O currículo pode ser compartilhado separadamente pela rota `/curriculo`, com um botão para voltar ao portfólio.
+## O que você encontra
 
-## O que a página mostra
-
-- **Apresentação e serviços:** proposta de contratação, trajetória e contatos; avatar do GitHub como marca.
-- **README do perfil:** sempre aberto, antes dos projetos.
-- **Projetos:** repositórios públicos próprios, sem forks nem arquivados; apresentação contextual da Hidrauboa e Webblioteca, com README carregado sob demanda em cada módulo.
-- **Últimos commits:** cards compactos com mensagem, repositório e data.
-- **Atividade na Webblioteca:** somente as seis atividades mais recentes recebidas, consultadas a cada 30 segundos. O limite é visual; o histórico permanece no banco.
+- Apresentação profissional, serviços, trajetória e contatos de Nathan Luceat.
+- README do perfil sempre aberto e documentação dos projetos carregada sob demanda.
+- Repositórios públicos próprios, sem forks nem arquivados.
+- Até **nove commits**, organizados em uma grade de três colunas em telas largas.
+- As **seis atividades mais recentes recebidas** da Webblioteca, com consulta a cada 30 segundos enquanto a aba está visível. O histórico completo recebido permanece no banco.
+- Currículo independente das integrações, com estilos para imprimir ou salvar em PDF pelo navegador.
 
 ## Stack
 
 | Camada | Tecnologia |
 |---|---|
-| Backend | PHP 8.4 + Laravel |
-| Banco de dados | MySQL 8 |
-| Servidor web | Nginx |
-| Infraestrutura | Docker + Docker Compose |
-| Frontend | Blade + JavaScript puro |
+| Backend | PHP 8.4 + Laravel 13 |
+| Banco local | MySQL 8 |
+| Servidor local | Nginx + PHP-FPM |
+| Ambiente local | Docker + Docker Compose |
+| Frontend | Blade, CSS e JavaScript puro |
+| Testes | PHPUnit, SQLite em memória e HTTP simulado |
+| Publicação | Laravel Cloud |
 
-## Como funciona
+## 1. Preparar o ambiente local
 
-```mermaid
-flowchart LR
-    B[Navegador] -->|página| Y[Yourceat - Laravel]
-    B -->|polling 30 s| Y
-    Y -->|REST + token + cache| G[API do GitHub]
-    Y -->|sync com since_id| W[API da Webblioteca]
-    Y --- D[(MySQL)]
-```
+### Pré-requisitos
 
-As chamadas autenticadas às APIs são feitas no servidor, sem expor tokens ao navegador. Fontes, avatar e imagens da documentação podem ser carregados diretamente de provedores externos.
+- Git.
+- Docker Engine com Compose v2, ou Docker Desktop **aberto e funcionando**.
+- Internet para baixar imagens e dependências e consultar as integrações.
+- Porta `8080` disponível.
 
-### API do GitHub
+Os comandos deste guia usam terminal **Linux, macOS ou Ubuntu/WSL2 no Windows**. No Windows, habilite a integração da sua distribuição em **Docker Desktop → Settings → Resources → WSL Integration**. Prefira clonar em `~/yourceat`, dentro do filesystem Linux.
 
-| Dado | Endpoint |
-|---|---|
-| Perfil | `GET /users/{user}` |
-| Projetos | `GET /users/{user}/repos` |
-| Commits | `GET /repos/{user}/{repo}/commits?author={user}` |
-| README do perfil | `GET /repos/{user}/{user}/readme` |
-
-Decisões técnicas:
-
-- **Autenticação com token:** sem token o GitHub permite 60 requisições por hora; com token, 5.000. Como o token só lê dados públicos, ele não precisa de nenhuma permissão extra.
-- **Cache de 5 minutos:** reduz chamadas repetidas; o consumo varia conforme os repositórios consultados e a documentação aberta pelos visitantes.
-- **Cache em dois níveis:** além da cópia "fresca", guardo uma cópia de 24 horas. Em falhas do GitHub, o último dado bom pode ser usado na geração atual do cache. Uma invalidação por webhook descarta também esse fallback.
-- **Monitoramento do limite:** o cabeçalho `X-RateLimit-Remaining` é lido a cada resposta e gera um aviso no log quando restam poucas requisições.
-- **Commits por repositório:** busco nos repositórios mais recentes em vez de usar o endpoint de eventos, que pode ter atraso.
-- **README sanitizado:** o HTML cru do Markdown é removido antes de renderizar, e protocolos inseguros são bloqueados.
-- **README dos projetos sob demanda:** `GET /projetos/{repo}/readme` só aceita repositórios públicos elegíveis do proprietário configurado. Cache por proprietário/geração/repositório, fallback de 24h, ausência cacheada por 60s e lock para concorrência. Ao renovar a documentação, o fallback só é permitido se os metadados confirmarem que o repositório continua público; falha nessa verificação deixa a documentação indisponível. A home não busca todos os READMEs.
-- **Documentação navegável:** links e imagens relativos dos projetos são resolvidos pelo AST do CommonMark; âncoras apontam ao GitHub. Conteúdo acima de 512 KiB oferece link para leitura integral, sem truncamento silencioso.
-
-### API da Webblioteca
-
-A Webblioteca expõe `GET /api/v1/activities` com autenticação por token (somente leitura), paginação e o filtro `since_id`.
-
-- **Cópia local:** o Yourceat sincroniza só os eventos novos (usando o maior `external_id` já salvo como `since_id`) e guarda no MySQL. A página sempre lê do banco, então continua funcionando se a Webblioteca estiver fora do ar ou lenta.
-- **Sem duplicados:** cada evento é gravado por `updateOrCreate` na chave `external_id`.
-- **Trava de sincronização:** no máximo 1 chamada à API a cada 20 segundos, mesmo com muitos visitantes.
-- **Privacidade:** a identificação do ator não é persistida; a apresentação usa "Um usuário" ou "Sistema". O resumo do evento ainda é armazenado, portanto a origem também deve evitar dados pessoais nesse conteúdo.
-- **Quase tempo real:** o navegador consulta o Yourceat a cada 30 segundos (polling) e só pede o que é mais novo que o último item exibido. Não é tempo real de verdade, e isso é intencional: polling é simples, robusto e suficiente para este caso.
-
-### Diagnóstico de autenticação da Webblioteca
-
-`WEBBLIOTECA_TOKEN` deve ser um token Sanctum emitido no **mesmo ambiente/banco** indicado por `WEBBLIOTECA_URL`, com a permissão `activities:read`. Um token criado na instalação local não autentica automaticamente na aplicação publicada.
-
-Se o endpoint responder 401 mesmo com a variável preenchida, confira o ambiente de emissão, validade/revogação e configuração efetivamente carregada. O health responder 200 não comprova autenticação. Para emitir um token, execute no console do ambiente da Webblioteca que será consumido:
+Confira as ferramentas:
 
 ```bash
-php artisan activities:issue-token yourceat --email=EMAIL_DE_UM_USUARIO_EXISTENTE
+git --version
+docker version
+docker compose version
 ```
 
-Copie o resultado diretamente para a configuração privada do Yourceat; nunca para chat, logs ou Git. Se houver configuração Laravel cacheada, atualize esse cache conforme o processo do ambiente. Não desative Sanctum para contornar 401.
+`docker version` precisa mostrar também o servidor, não apenas o cliente. Você **não precisa instalar PHP, Composer, MySQL ou Node na máquina**: PHP e Composer estão na imagem da aplicação; MySQL e Nginx rodam em containers.
 
-O sincronizador importa até 50 eventos por janela de 20 segundos e valida/grava cada lote em transação. O polling devolve os próximos 20 IDs, em ordem de exibição decrescente, sem pular eventos intermediários. Falhas ficam registradas como `Webblioteca sync failed`, apenas com etapa e status HTTP, sem corpo da resposta ou credenciais.
-
-Testes isolados de backend, com SQLite em memória e HTTP simulado:
-
-```bash
-docker compose exec -T -e APP_ENV=testing -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: -e CACHE_STORE=array -e SESSION_DRIVER=array app php artisan test
-```
-
-## Rodando localmente
-
-Pré-requisitos: Docker, Docker Compose e um token do GitHub (Settings → Developer settings → Personal access tokens → Fine-grained tokens, com acesso somente leitura a repositórios públicos).
+### Clonar e criar a configuração privada
 
 ```bash
 git clone https://github.com/NathanLuceat/yourceat.git
 cd yourceat
 cp .env.example .env
-# edite o .env (veja a tabela abaixo)
+```
 
+Se já existe um `.env`, **não repita a cópia por cima dele**. Os próximos comandos devem ser executados na pasta do projeto.
+
+Abra `.env` no editor e ajuste as entradas abaixo. **Edite as linhas existentes, em vez de acrescentar versões duplicadas.** O exemplo atual repete `CACHE_STORE`; mantenha apenas uma entrada com o valor indicado.
+
+```dotenv
+APP_NAME=Yourceat
+APP_ENV=local
+APP_KEY=
+APP_DEBUG=true
+APP_URL=http://localhost:8080
+
+DB_CONNECTION=mysql
+DB_HOST=db
+DB_PORT=3306
+DB_DATABASE=yourceat
+DB_USERNAME=yourceat
+DB_PASSWORD=secret
+
+CACHE_STORE=database
+SESSION_DRIVER=database
+QUEUE_CONNECTION=database
+
+GITHUB_USERNAME=NathanLuceat
+GITHUB_TOKEN=
+GITHUB_CACHE_TTL=300
+GITHUB_WEBHOOK_SECRET=
+GITHUB_WEBHOOK_REPOSITORIES=
+
+WEBBLIOTECA_URL=https://webblioteca.laravel.cloud
+WEBBLIOTECA_TOKEN=
+```
+
+**Como interpretar esses valores:**
+
+- `db` é o nome do serviço MySQL no Compose. Não troque por `localhost`: dentro do container, `localhost` é o próprio container da aplicação.
+- Banco, usuário e senha acima correspondem ao `docker-compose.yml`. `secret` é uma senha de desenvolvimento, **não uma sugestão para produção**. Alterar só o `.env` não altera a criação do banco configurada no Compose.
+- `APP_KEY` será gerada no próximo passo. Não copie a chave do site publicado.
+- `GITHUB_USERNAME=NathanLuceat` mostra meus repositórios. Você pode usar seu próprio usuário, mas os textos pessoais da página são editados separadamente nas views.
+- Os tokens vazios são intencionais neste exemplo: preencha-os apenas no seu `.env` privado para usar as integrações. Não são credenciais de demonstração.
+- Substitua o placeholder `http://host.docker.internal:PORTA` da configuração de exemplo por uma URL real, como a URL HTTPS acima. Não acrescente `/api/v1/activities` à variável.
+- Os webhooks podem ficar vazios no desenvolvimento local. Eles não são necessários para abrir o site.
+
+**Nunca coloque tokens ou o `.env` no Git, em screenshots, logs ou mensagens públicas.**
+
+### Subir os containers e instalar as dependências
+
+```bash
 docker compose up -d --build
 docker compose exec app composer install
 docker compose exec app php artisan key:generate
-docker compose exec app php artisan migrate
 ```
 
-Acesse `http://localhost:8080`.
+- `up` sobe `app` (PHP-FPM), `db` (MySQL) e `web` (Nginx).
+- `composer install` usa as versões do `composer.lock`; não substitua por `composer update` para instalar o projeto.
+- `key:generate` preenche a chave da sua instalação local. Não precisa rodar novamente a cada inicialização.
 
-### Frontend e personalização
+Não é necessário executar `npm install`, `npm run build`, `composer run setup`, `php artisan serve` ou um worker de filas para este portfólio.
 
-O portfólio usa Blade, CSS e JavaScript puro, sem build obrigatório: a view carrega diretamente `public/css/portfolio.css`, `public/js/activities.js` e `public/js/projects.js`. Os comandos do Vite não são necessários para esta página.
+### Preparar o banco
 
-- Conteúdo pessoal, contatos e estrutura: `resources/views/home.blade.php`.
-- Paleta, tipografia e responsividade: tokens em `public/css/portfolio.css`. O tema claro da Webblioteca fica isolado em `.library-section`.
-- A lista de projetos e descrições vem de `GitHubService`. Apresentações comerciais dos cases correspondentes ficam em `resources/views/partials/project.blade.php`, separadas da documentação remota.
-- O README pessoal permanece aberto. Documentação de projetos carrega ao expandir o módulo; sem JavaScript, o link para o GitHub continua disponível.
-- Fraunces e Figtree são carregadas pelo Bunny Fonts; Georgia e fontes do sistema mantêm a página legível se esse serviço estiver indisponível.
-- “Lista consultada” informa a consulta ao Yourceat, não confirma a disponibilidade da API externa da Webblioteca.
+O MySQL pode levar alguns segundos para inicializar na primeira execução. Confira:
 
-Teste isolado da view, sem chamar APIs nem consultar o banco:
+```bash
+docker compose logs db
+```
+
+Espere a inicialização terminar e o servidor indicar que aceita conexões. Então execute:
+
+```bash
+docker compose exec app php artisan migrate
+docker compose exec app php artisan migrate:status
+docker compose ps
+```
+
+As migrations criam as tabelas da aplicação, incluindo atividades, sessões, cache e locks. Não é necessário criar migrations novas para o cache, popular dados com seed ou cadastrar um usuário para visitar o portfólio.
+
+Se `migrate` retornar `Connection refused`, confira os logs do MySQL e repita depois que ele estiver pronto. O `depends_on` do Compose ordena a inicialização, mas não garante que o banco já esteja aceitando conexões.
+
+### Abrir no navegador
+
+- **Portfólio local:** <http://localhost:8080>
+- **Currículo local:** <http://localhost:8080/curriculo>
+- **Health da aplicação:** <http://localhost:8080/up>
+
+Sem credenciais das integrações, a página pode mostrar estados vazios ou de indisponibilidade. A Webblioteca sem token registra falha de configuração; isso não significa que o Docker falhou. Para ver dados reais, siga a próxima seção.
+
+O endpoint `/up` verifica a inicialização do Laravel: um HTTP 200 **não comprova autenticação nem disponibilidade das APIs externas**.
+
+## 2. Conectar as APIs
+
+### GitHub
+
+1. No GitHub, abra **Settings → Developer settings → Personal access tokens → Fine-grained tokens**.
+2. Crie um token com o mínimo de acesso necessário à leitura de dados públicos. O portfólio não precisa de permissões de escrita nem acesso a projetos privados.
+3. Copie o valor diretamente para `GITHUB_TOKEN` no seu `.env`.
+4. Confirme `GITHUB_USERNAME`.
+5. Se a configuração estava cacheada, atualize-a localmente:
+
+```bash
+docker compose exec app php artisan config:clear
+```
+
+O token é usado pelo servidor e não é enviado ao navegador. Os limites da API variam conforme a autenticação; o cache evita repetir consultas a cada visita. Um token inválido pode resultar em 401, mesmo para dados públicos.
+
+### Webblioteca
+
+A integração precisa de um token Sanctum com habilidade `activities:read`, emitido **no mesmo ambiente/banco da Webblioteca indicado na URL**.
+
+- Para consumir `https://webblioteca.laravel.cloud`, solicite um token ao responsável por esse ambiente.
+- Se você administra a Webblioteca, o comando de emissão documentado para ela é:
+
+```bash
+php artisan activities:issue-token yourceat --email=EMAIL_DE_UM_USUARIO_EXISTENTE
+```
+
+**Esse comando pertence à Webblioteca, não ao Yourceat.** Execute-o somente no ambiente da Webblioteca que será consumido. Um token criado numa instalação local não autentica automaticamente na instalação publicada.
+
+Salve o resultado em `WEBBLIOTECA_TOKEN`, confira a URL base e execute no Yourceat:
+
+```bash
+docker compose exec app php artisan config:clear
+docker compose exec app php artisan webblioteca:sync
+```
+
+O segundo comando faz uma chamada real à API e grava os eventos no banco local.
+
+| Saída | Significado |
+|---|---|
+| `Webblioteca: synced (10)` | Um lote de dez eventos foi sincronizado. |
+| `Webblioteca: synced (0)` | A consulta funcionou, sem eventos novos. |
+| `Webblioteca: skipped (0)` | Execução dispensada por cooldown ou lock de outra execução. |
+| `Webblioteca: failed (0)` | Falha de configuração, API, payload ou armazenamento; confira os logs. |
+
+Sucesso e `skipped` retornam código de saída zero; `failed` retorna código 1. Se acabou de visitar a home, aguarde o cooldown antes de repetir o comando.
+
+Para consumir uma Webblioteca rodando na sua máquina, use uma URL alcançável pelo container, por exemplo `http://host.docker.internal:8000` **somente se ela realmente estiver acessível nessa porta**. O Compose já configura o alias `host.docker.internal`.
+
+## 3. Entender o fluxo, com exemplos
+
+### GitHub: consulta, cache e documentação
+
+O Laravel consulta o perfil e os repositórios do usuário configurado. Para os commits, consulta até quatro repositórios recentes, com até cinco commits por repositório, filtra pelo autor e mostra os **nove mais recentes entre os recebidos**. Se houver menos, não cria cards artificiais para completar a grade.
+
+| Informação | Endpoint externo do GitHub |
+|---|---|
+| Perfil | `GET /users/{user}` |
+| Repositórios | `GET /users/{user}/repos` |
+| Commits | `GET /repos/{user}/{repo}/commits?author={user}` |
+| README do perfil | `GET /repos/{user}/{user}/readme` |
+| README de um projeto | `GET /repos/{user}/{repo}/readme` |
+
+- Cache fresco de 300 segundos por padrão e cópia de fallback por até 24 horas na mesma geração.
+- Repositórios privados, forks, arquivados e o repositório de perfil não entram na lista de projetos.
+- Ao expandir um projeto, o navegador pede sua documentação ao Yourceat; a home não busca todos os READMEs de uma vez.
+- Markdown é sanitizado. Links e imagens relativos dos projetos são resolvidos para o GitHub; conteúdo acima de 512 KiB oferece leitura integral no GitHub.
+- README ausente é cacheado por 60 segundos. Ao renovar a documentação, a falha na confirmação de visibilidade pública impede o fallback desse caminho.
+
+Exemplo local, usando `GITHUB_USERNAME=NathanLuceat`:
+
+```bash
+curl -H 'Accept: application/json' \
+  'http://localhost:8080/projetos/yourceat/readme'
+```
+
+Resposta **ilustrativa**, não uma captura da produção:
+
+```json
+{
+  "status": "available",
+  "html": "<h1>Yourceat</h1><p>Documentação sanitizada.</p>",
+  "url": "https://github.com/NathanLuceat/yourceat#readme"
+}
+```
+
+Um projeto não elegível retorna 404; indisponibilidade temporária pode retornar 503. O endpoint público tem limite de 30 requisições por minuto.
+
+### Webblioteca: API externa → banco local → navegador
+
+1. A home, o polling ou o comando de sincronização chama o serviço.
+2. O serviço usa o maior `external_id` salvo como cursor e pede até 50 eventos novos.
+3. O lote é validado e gravado em transação, sem duplicar `external_id`.
+4. O navegador recebe uma versão de apresentação dos dados locais, sem o token nem a identidade do ator.
+
+A requisição externa é feita **pelo servidor**, não pelo JavaScript:
+
+```http
+GET https://webblioteca.laravel.cloud/api/v1/activities?since_id=0&limit=50
+Accept: application/json
+Authorization: Bearer <TOKEN_PRIVADO_DA_WEBBLIOTECA>
+```
+
+Resposta externa **fictícia para explicar o contrato**:
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "type": "emprestimo.criado",
+      "summary": {"livro": "Livro de exemplo"},
+      "actor": {"id": 42},
+      "created_at": "2026-10-12T12:00:00Z"
+    }
+  ]
+}
+```
+
+A identidade do ator não é persistida; o texto usa “Um usuário” ou “Sistema”. O resumo do evento é armazenado, por isso a origem também deve evitar dados pessoais nesse campo.
+
+Você pode consultar o endpoint **local do Yourceat**, sem informar tokens:
+
+```bash
+curl -H 'Accept: application/json' \
+  'http://localhost:8080/atividades?since_id=0'
+```
+
+Resposta local **ilustrativa** para o evento acima:
+
+```json
+{
+  "items": [
+    {
+      "id": "1",
+      "text": "Um usuário emprestou “Livro de exemplo”",
+      "at": "2026-10-12T12:00:00+00:00"
+    }
+  ],
+  "next_since_id": "1"
+}
+```
+
+Na próxima consulta, use `since_id=1`. Sem novidades, `items` vem vazio e o cursor permanece igual. Os IDs são strings para não perder precisão no JavaScript.
+
+**São três limites diferentes:** até 50 eventos importados por sincronização, até 20 retornados por consulta incremental e seis cards visíveis. O endpoint seleciona os próximos IDs antes de inverter a ordem para exibição, sem pular eventos intermediários.
+
+Há cooldown de 20 segundos e lock contra sincronizações simultâneas. O polling ocorre a cada 30 segundos, pula abas ocultas e não sobrepõe requisições. “Lista consultada” confirma a consulta ao Yourceat, não o sucesso da API externa. Se a Webblioteca falhar, os dados já recebidos continuam no banco local.
+
+## 4. Rotina de desenvolvimento
+
+### Iniciar e parar
+
+Para voltar a trabalhar depois da instalação:
+
+```bash
+docker compose up -d
+```
+
+Para parar os containers sem apagar os dados:
+
+```bash
+docker compose down
+```
+
+**Não acrescente `-v` ao comando de parada:** isso remove os volumes e pode apagar o banco local. Não use `migrate:fresh` como solução de rotina para erros.
+
+### Sincronizar sem depender de visitas
+
+O Compose não inicia o scheduler automaticamente. Se quiser exercitar a agenda local, abra outro terminal na pasta do projeto e execute:
+
+```bash
+docker compose exec app php artisan schedule:work
+```
+
+Deixe-o aberto e encerre com `Ctrl+C`. A tarefa é horária, não executa a cada minuto. Para conferir a agenda sem disparar sincronização:
+
+```bash
+docker compose exec app php artisan schedule:list
+```
+
+A expressão esperada é `0 * * * *` para `webblioteca:sync`. O fuso configurado no backend é UTC em `config/app.php`; o projeto não lê `APP_TIMEZONE` atualmente.
+
+### Testar
+
+No ambiente local, remova eventual configuração cacheada antes dos testes:
+
+```bash
+docker compose exec app php artisan config:clear
+docker compose exec -T \
+  -e APP_ENV=testing \
+  -e DB_CONNECTION=sqlite \
+  -e DB_DATABASE=:memory: \
+  -e DB_URL= \
+  -e CACHE_STORE=array \
+  -e SESSION_DRIVER=array \
+  app php artisan test
+```
+
+A suíte usa SQLite em memória e chamadas HTTP simuladas. Não exige tokens funcionais, não consome as APIs reais e não deve usar o banco MySQL de desenvolvimento. Testes aprovados não comprovam disponibilidade dos serviços externos.
+
+Para executar apenas os testes da view:
 
 ```bash
 docker compose exec -T app php artisan test --filter PortfolioViewTest
 ```
 
-### Currículo independente
+O workflow `.github/workflows/tests.yml` executa a suíte em push e pull request, com PHP 8.4, dependências do lock e uma chave temporária. Consulte a aba **Actions** para ver cada execução. O workflow não faz deploy nem configura proteção de branch.
 
-A página `/curriculo` pode ser compartilhada sem enviar o restante do portfólio (localmente: `http://localhost:8080/curriculo`). O conteúdo fica em `resources/views/curriculo.blade.php`, com estilos `.cv-*` no CSS do portfólio. Não depende das APIs do GitHub ou da Webblioteca e não carrega os scripts de integração.
+## 5. Configuração em produção
 
-Use a impressão do navegador para salvar em PDF; o currículo ganha fundo branco e oculta a navegação nesse modo. Os contatos públicos usam o e-mail atual, sem endereço residencial completo ou data de nascimento.
+A instalação local é independente do site em **https://yourceat.laravel.cloud**. Não copie credenciais de produção para o tutorial nem use as senhas de desenvolvimento do Compose no Cloud.
 
-### Variáveis de ambiente
-
-| Variável | Descrição |
-|---|---|
-| `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | Conexão com o MySQL (`DB_HOST=db` no Docker) |
-| `CACHE_STORE` | `database` |
-| `APP_TIMEZONE` | Fuso horário, por exemplo `America/Sao_Paulo` |
-| `GITHUB_USERNAME` | Usuário cujo perfil será exibido |
-| `GITHUB_TOKEN` | Token pessoal do GitHub |
-| `GITHUB_CACHE_TTL` | Tempo de cache em segundos (padrão `300`) |
-| `GITHUB_WEBHOOK_SECRET` | Secret privado exclusivo para validar as entregas do webhook |
-| `GITHUB_WEBHOOK_REPOSITORIES` | Lista autorizada de `proprietário/repositório`, separada por vírgulas; vazia não autoriza entregas |
-| `WEBBLIOTECA_URL` | URL base da API da Webblioteca |
-| `WEBBLIOTECA_TOKEN` | Token de leitura da API da Webblioteca |
-
-> Nunca faça commit do `.env`. Ele já está no `.gitignore`.
-
-## Estrutura
-
-```
-app/
-├── Http/Controllers/
-│   ├── HomeController.php          # monta a página
-│   └── ActivitiesController.php    # JSON para o polling
-├── Models/WebbliotecaActivity.php  # cópia local dos eventos
-└── Services/
-    ├── GitHubService.php           # cliente da API do GitHub (cache, fallback)
-    └── WebbliotecaService.php      # sincronização com a API da Webblioteca
-public/js/activities.js             # polling no navegador
-resources/views/home.blade.php      # página
-docker/nginx.conf                   # configuração do Nginx
-```
-
-## Automações e ativação em produção
-
-### Testes no GitHub Actions
-
-O workflow `.github/workflows/tests.yml` executa a suíte em pushes e pull requests, usando PHP 8.4, dependências do `composer.lock`, SQLite em memória e uma chave de aplicação temporária. Não usa banco, tokens ou secrets de produção e não precisa de build Node.
-
-Após enviar o workflow, confira a aba **Actions** do repositório. A execução local dos testes não substitui a confirmação de um run aprovado no GitHub. O workflow testa o código, mas não faz deploy nem configura proteção de branch automaticamente.
+No ambiente publicado, use `APP_URL=https://yourceat.laravel.cloud`, `APP_ENV=production` e `APP_DEBUG=false`. Banco e credenciais são os do próprio ambiente. Preserve a `APP_KEY` existente.
 
 ### Webhooks do GitHub
 
-O endpoint é `POST https://SEU_DOMINIO/webhooks/github`. Após publicar esta versão, configure no ambiente privado do Laravel Cloud:
+O receptor publicado é:
 
-- `GITHUB_WEBHOOK_SECRET`: um secret aleatório exclusivo para os webhooks, nunca o token da API. Não cole esse valor em chat, README ou Git.
-- `GITHUB_WEBHOOK_REPOSITORIES`: a lista autorizada, separada por vírgulas: `NathanLuceat/hidrauboa-site,NathanLuceat/webblioteca,NathanLuceat/yourceat,NathanLuceat/NathanLuceat`.
-- `GITHUB_USERNAME`: `NathanLuceat`.
+```text
+https://yourceat.laravel.cloud/webhooks/github
+```
 
-Nos quatro repositórios, acesse **Settings → Webhooks → Add webhook**, informe a URL HTTPS, selecione `application/json`, mantenha a verificação SSL habilitada e informe o mesmo secret privado. Selecione os eventos **Pushes** e **Repositories**. Confira a entrega inicial `ping` e depois uma entrega real na área **Recent Deliveries**.
+No ambiente privado do Yourceat, configure `GITHUB_WEBHOOK_SECRET` com um valor aleatório exclusivo, diferente de `GITHUB_TOKEN`, e a lista autorizada:
 
-A autenticação usa HMAC SHA-256 do corpo bruto. A exceção CSRF é restrita ao webhook; as demais rotas não perdem essa proteção. Sem secret ou repositório autorizado, nenhuma invalidação é permitida. O corpo é limitado a 1 MiB e o endpoint possui limite de requisições.
+```dotenv
+GITHUB_USERNAME=NathanLuceat
+GITHUB_WEBHOOK_REPOSITORIES=NathanLuceat/hidrauboa-site,NathanLuceat/webblioteca,NathanLuceat/yourceat,NathanLuceat/NathanLuceat
+```
 
-O webhook apenas invalida o cache do proprietário autorizado, sem buscar dados na API durante a entrega. A próxima consulta carrega os dados atualizados; portanto isso não é atualização instantânea de páginas já abertas. A invalidação também descarta o fallback anterior. Uma falha do GitHub logo após o evento pode deixar o conteúdo temporariamente indisponível, em vez de reapresentar dados anteriores à mudança de visibilidade.
+Em cada repositório da lista, abra **Settings → Webhooks → Add webhook** e use:
 
-Após renomear um repositório, atualize a lista autorizada. Respostas já enviadas não podem ser recolhidas e eventos só têm efeito quando entregues. Entregas repetidas são seguras; acompanhe e reenvie entregas que falharam pelo painel do GitHub.
+| Campo | Valor |
+|---|---|
+| Payload URL | `https://yourceat.laravel.cloud/webhooks/github` |
+| Content type | `application/json` |
+| Secret | O mesmo valor privado configurado no Cloud |
+| SSL verification | Habilitada |
+| Eventos | **Pushes** e **Repositories** |
+| Active | Marcado |
 
-### Sincronização horária no Laravel Cloud
+Confira **Recent Deliveries**: `ping` deve responder 200 com `{"status":"pong"}`; um push autorizado, 200 com `{"status":"invalidated"}`. Não aponte os webhooks de produção para `localhost`.
 
-O comando `php artisan webblioteca:sync` reutiliza a sincronização existente. Sucesso, lote vazio e execução dispensada pelo cooldown/lock retornam código zero; falhas reais retornam código diferente de zero, com mensagem sem credenciais ou conteúdo dos eventos.
+O endpoint autentica o corpo bruto com HMAC SHA-256, valida proprietário e lista autorizada, limita o corpo a 1 MiB e aplica limite de 60 requisições por minuto por IP. Só essa rota POST substitui CSRF pela assinatura. Sem secret, responde 503; assinatura inválida, 401; repositório não autorizado, 403.
 
-Para ativar no Cloud:
+O webhook **não faz deploy nem busca a API durante a entrega**: invalida o cache do proprietário e a próxima consulta busca dados novos. O fallback anterior também é descartado, evitando reapresentá-lo depois de uma mudança de visibilidade. Isso pode deixar dados temporariamente indisponíveis se o GitHub falhar logo após o evento.
 
-1. Confirme banco persistente, migrations existentes aplicadas e as variáveis privadas da Webblioteca.
-2. Use cache compartilhado entre aplicação, scheduler e réplicas, como `CACHE_STORE=database` com a tabela de cache/locks existente. Não use `array` ou cache local por instância em produção.
-3. No **App cluster** do ambiente correto, habilite **Scheduler**, salve e faça redeploy.
-4. Confira `php artisan schedule:list`: a sincronização deve aparecer uma vez por hora.
-5. Para uma verificação manual, execute `php artisan webblioteca:sync` no console do ambiente. Esse comando consulta a API e grava os novos eventos; não é apenas diagnóstico de leitura.
-6. Acompanhe os logs e confirme uma execução horária sem visitas antes de considerar a ativação concluída.
+Entregas repetidas podem invalidar novamente. Após renomear um repositório, atualize a lista autorizada. Confira e reenvie entregas com falha pelo painel; uma resposta já enviada ao visitante não pode ser recolhida.
 
-O Cloud invoca `schedule:run` a cada minuto, mas a tarefa só fica devida a cada hora. Não adicione um segundo cron ou worker para a mesma agenda. Localmente, `docker compose exec app php artisan schedule:work` mantém o scheduler em primeiro plano até ser interrompido.
+### Agenda horária no Laravel Cloud
 
-Cada execução importa até 50 eventos. Sem visitantes, isso significa até 50 eventos por hora; um backlog maior continua nas próximas execuções. A sincronização por visitas e o polling permanecem ativos, respeitando o cooldown de 20 segundos. Locks evitam sobreposição e `onOneServer` coordena réplicas via cache compartilhado.
+1. Confirme as variáveis privadas da Webblioteca e o banco persistente com as migrations existentes aplicadas.
+2. Use cache compartilhado entre HTTP, scheduler e réplicas. `CACHE_STORE=database` funciona com as tabelas `cache` e `cache_locks`; não use `array` ou cache local de uma instância em produção.
+3. No painel de infraestrutura do ambiente Yourceat, abra **App cluster**, habilite **Scheduler**, salve e faça redeploy.
+4. No console do ambiente, confira `php artisan schedule:list`.
+5. Teste `php artisan webblioteca:sync`, sabendo que faz chamada real e grava os eventos.
+6. Confirme uma execução automática no horário seguinte, sem disparar o comando manualmente.
 
-Tarefas agendadas podem despertar um ambiente com Scale-to-Zero e gerar custo de computação. A frequência horária reduz execuções, mas não garante custo zero. Mudanças de agenda exigem novo deploy no Cloud.
+O Cloud invoca `schedule:run` a cada minuto, mas a nossa tarefa fica devida apenas no minuto zero de cada hora. `onOneServer` e `withoutOverlapping` coordenam as execuções; não é necessário outro cron nem worker para essa agenda.
 
-Referências: [Scheduler no Laravel Cloud](https://laravel.com/cloud/docs/scheduled-tasks.md) e [validação de webhooks do GitHub](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries).
+Sem visitantes, o limite é de até 50 eventos importados por hora; um backlog maior continua nas próximas execuções. Tarefas podem despertar Scale-to-Zero e gerar custo. Mudanças de agenda exigem novo deploy.
 
-## Checklist de entrega
+Referências: [Scheduler no Laravel Cloud](https://laravel.com/cloud/docs/scheduled-tasks.md) e [validação de webhooks no GitHub](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries).
 
-- [x] Testes da integração Webblioteca com `Http::fake()` e banco isolado (sem consumir cota das APIs)
-- [x] Testes de READMEs do GitHub com `Http::fake()` (cache, permissões, falhas e sanitização)
-- [x] Workflow GitHub Actions configurado para push e pull request
-- [ ] Confirmar primeiro run aprovado na aba Actions após enviar o workflow
-- [x] Apresentação comercial, README aberto, documentação de projetos e layout responsivo
-- [x] Endpoint de webhook autenticado e invalidação de cache implementados e testados
-- [ ] Cadastrar os webhooks nos quatro repositórios e confirmar ping/entregas reais
-- [x] Comando e agenda horária de sincronização, independente de visitas
-- [ ] Habilitar Scheduler no Laravel Cloud e confirmar execução sem visitas
+## 6. Problemas comuns
 
-## Higiene do repositório
+| Sintoma | O que conferir |
+|---|---|
+| Docker não encontrado no WSL | Docker Desktop aberto e integração da distribuição habilitada. |
+| Não conecta ao daemon Docker | Inicie o Docker Engine/Desktop e tente `docker version` novamente. |
+| Porta 8080 ocupada | Pare o outro serviço ou altere a porta publicada de `web` no Compose e ajuste `APP_URL`. |
+| `vendor/autoload.php` não encontrado | Execute `docker compose exec app composer install`. |
+| `No application encryption key` | Na primeira instalação local, execute `docker compose exec app php artisan key:generate`. |
+| MySQL `Connection refused` | Aguarde a inicialização, confira `docker compose logs db` e use `DB_HOST=db`. |
+| Tabela de cache, sessão ou atividades ausente | Execute as migrations existentes; não precisa gerar tabelas novas manualmente. |
+| `Access denied` no MySQL | Confira credenciais do Compose e do `.env`. Mudar variáveis não altera usuários já criados no volume. Não apague o volume para contornar o erro. |
+| Dados do GitHub antigos | Confira TTL e entregas dos webhooks; a cópia fresca padrão dura cinco minutos. |
+| Webblioteca responde 401 | Confira token, ambiente de emissão, revogação, habilidade e configuração cacheada. Não desative Sanctum. |
+| Página abre, mas feed está vazio | Configure a Webblioteca, execute `webblioteca:sync` e confira se a origem tem eventos. |
+| Variável alterada não faz efeito | Localmente, execute `php artisan config:clear` dentro do container; no Cloud, aplique as alterações pelo deploy do ambiente. |
 
-O `.gitignore` exclui credenciais, dependências, caches, logs, configurações locais de editores e arquivos de instruções/sessão de agentes de IA. Esses arquivos podem permanecer no disco sem entrar nos próximos commits.
+Para investigar logs locais:
 
-Arquivos ocultos necessários ao projeto, como `.env.example`, `.editorconfig`, `.gitattributes` e `.gitignore`, continuam versionados. Remover um arquivo do índice não apaga suas versões do histórico anterior. Se uma credencial tiver sido exposta, revogue-a e substitua-a.
+```bash
+docker compose logs --tail=100 app web db
+docker compose exec app tail -n 100 storage/logs/laravel.log
+```
 
-Os testes usam chamadas HTTP simuladas: a aprovação da suíte não comprova disponibilidade das APIs reais. Para compartilhar o currículo externamente, use `/curriculo` no domínio publicado; `localhost` funciona apenas na própria máquina.
+O log Laravel pode ainda não existir antes da primeira escrita. Falhas da Webblioteca registram `Webblioteca sync failed` com etapa e status HTTP, sem corpo da resposta nem credenciais. Revise e remova informações sensíveis antes de compartilhar logs.
+
+Se houver **Permission denied** ao gravar em `storage` ou `bootstrap/cache`, confira a propriedade dessas pastas. No ambiente Docker deste projeto, o PHP-FPM usa `www-data`. Uma correção restrita a elas é:
+
+```bash
+docker compose exec app chown -R www-data:www-data storage bootstrap/cache
+```
+
+Execute somente se esse for o problema: em Linux/WSL, o bind mount também altera a propriedade dessas pastas no host. Não aplique `chmod -R 777` nem permissões recursivas no projeto inteiro.
+
+## 7. Onde personalizar
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `resources/views/home.blade.php` | Textos, serviços, contatos e estrutura do portfólio |
+| `resources/views/curriculo.blade.php` | Currículo e link de retorno ao site |
+| `resources/views/partials/project.blade.php` | Apresentação dos cases e módulos de documentação |
+| `public/css/portfolio.css` | Paleta, tipografia, responsividade e impressão do currículo |
+| `public/js/activities.js` | Polling e limite visual de seis atividades |
+| `public/js/projects.js` | Carregamento sob demanda dos READMEs |
+| `app/Services/GitHubService.php` | Consultas GitHub, cache e limite de commits |
+| `app/Support/GitHubCache.php` | Gerações de cache por proprietário |
+| `app/Services/WebbliotecaService.php` | Validação e sincronização dos eventos |
+| `app/Console/Commands/SyncWebblioteca.php` | Comando de sincronização |
+| `routes/console.php` | Agenda horária |
+| `routes/web.php` | Páginas, endpoints JSON e webhook |
+| `.github/workflows/tests.yml` | Testes no GitHub Actions |
+
+As fontes Fraunces e Figtree vêm do Bunny Fonts; há fontes locais de fallback. Avatar e imagens da documentação também podem vir de provedores externos. As credenciais das APIs permanecem no servidor.
+
+O `.gitignore` mantém credenciais, dependências, caches, logs e arquivos locais de editores/agentes fora do versionamento. Arquivos ocultos necessários, como `.env.example`, `.editorconfig` e `.gitignore`, continuam versionados. Ignorar um arquivo não apaga versões antigas: se uma credencial for exposta, revogue-a.
+
+---
+
+**Seu programador. Por Nathan Luceat.** [Conheça o portfólio](https://yourceat.laravel.cloud).
