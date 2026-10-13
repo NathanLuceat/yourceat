@@ -17,7 +17,7 @@
   <header class="site-header shell">
     <a class="wordmark" href="#perfil" aria-label="Yourceat, início">
       <span class="brand-photo"><span aria-hidden="true">NL</span>@if (!empty($profile['avatar_url']))<img src="{{ $profile['avatar_url'] }}" alt="" width="48" height="48">@endif</span>
-      <span>yourceat<small>Seu Luceat.</small></span>
+      <span>yourceat<small>Seu programador.</small></span>
     </a>
     <nav aria-label="Navegação principal">
       <a href="#solucoes">Soluções</a>
@@ -140,7 +140,7 @@
 
     <section id="contato" class="contact-section" aria-labelledby="contact-title">
       <div class="shell contact-inner">
-        <div><p class="section-caption">Seu Luceat, no seu próximo projeto</p><h2 id="contact-title">Qual problema<br>vamos resolver?</h2><p>Me conte sobre seu negócio, sua ideia e o que precisa funcionar melhor. A primeira conversa é para entender o que podemos construir juntos.</p><p class="contact-region">Boa Esperança, Santa Rita do Sapucaí e região.<br>Aberto a novos lugares e projetos à distância.</p></div>
+        <div><p class="section-caption">Seu programador, no seu próximo projeto</p><h2 id="contact-title">Qual problema<br>vamos resolver?</h2><p>Me conte sobre seu negócio, sua ideia e o que precisa funcionar melhor. A primeira conversa é para entender o que podemos construir juntos.</p><p class="contact-region">Boa Esperança, Santa Rita do Sapucaí e região.<br>Aberto a novos lugares e projetos à distância.</p></div>
         <div class="contact-links">
           <a class="contact-primary" href="https://www.instagram.com/nathanluceat/"><span>Converse comigo no Instagram</span><strong>@nathanluceat</strong><span class="contact-invite">Meu principal canal de contato</span></a>
           <a href="mailto:nathanluceat@gmail.com"><span>E-mail</span><strong>nathanluceat@gmail.com</strong></a>
