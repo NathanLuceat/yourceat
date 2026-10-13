@@ -6,6 +6,7 @@ use App\Services\GitHubService;
 use App\Support\GitHubCache;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use RuntimeException;
 use Tests\TestCase;
 
 class GitHubCacheTest extends TestCase
@@ -113,6 +114,51 @@ class GitHubCacheTest extends TestCase
         $this->assertNull($service->profileReadmeHtml());
         $this->assertSame([], $service->recentCommits());
         Http::assertNotSent(fn ($request) => str_ends_with($request->url(), '/readme') || str_contains($request->url(), '/commits'));
+    }
+
+    public function test_recent_commits_returns_the_nine_newest_entries(): void
+    {
+        Http::fake([
+            'https://api.github.com/users/Owner/repos*' => Http::response(collect(['first', 'second'])->map(fn ($name) => [
+                'name' => $name, 'private' => false, 'fork' => false, 'archived' => false,
+            ])->all()),
+            'https://api.github.com/repos/Owner/*/commits*' => Http::response(collect(range(1, 5))->map(fn ($day) => [
+                'sha' => str_repeat((string) $day, 40),
+                'commit' => ['message' => 'Commit '.$day, 'author' => ['date' => '2026-10-0'.$day.'T12:00:00Z']],
+                'html_url' => 'https://github.com/Owner/demo/commit/'.$day,
+            ])->all()),
+            'https://api.github.com/repos/Owner/*' => Http::response(['private' => false]),
+        ]);
+
+        $commits = app(GitHubService::class)->recentCommits();
+
+        $this->assertCount(9, $commits);
+        $this->assertSame('Commit 5', $commits[0]['message']);
+        $this->assertSame('Commit 1', $commits[8]['message']);
+        $this->assertSame(['first', 'second'], array_values(array_unique(array_column($commits, 'repo'))));
+    }
+
+    public function test_recent_commits_limits_existing_fresh_and_stale_cache_to_nine(): void
+    {
+        $cache = app(GitHubCache::class);
+        $key = $cache->key('Owner', $cache->generation('Owner'), 'commits');
+        $old = array_map(fn ($number) => ['message' => 'Commit '.$number], range(1, 10));
+        Cache::put($key, $old);
+        Cache::put($key.':stale', $old);
+        $service = app(GitHubService::class);
+
+        $this->assertSame(array_slice($old, 0, 9), $service->recentCommits());
+        Http::assertNothingSent();
+
+        Cache::forget($key);
+        $failingService = new class extends GitHubService
+        {
+            public function repos(): array
+            {
+                throw new RuntimeException('Fixture failure');
+            }
+        };
+        $this->assertSame(array_slice($old, 0, 9), $failingService->recentCommits());
     }
 
     private function fakeProject(array $overrides = []): void

@@ -52,9 +52,9 @@ class GitHubService
         }) ?? [];
     }
 
-    public function recentCommits(int $repos = 4, int $limit = 10): array
+    public function recentCommits(int $repos = 4, int $limit = 9): array
     {
-        return $this->cached('commits', function () use ($repos, $limit) {
+        return array_slice($this->cached('commits', function () use ($repos, $limit) {
             return collect($this->repos())->take($repos)
                 ->flatMap(function ($repo) {
                     if (! $this->isPublic($repo['name'])) {
@@ -76,7 +76,7 @@ class GitHubService
                         : [];
                 })
                 ->sortByDesc('date')->take($limit)->values()->all();
-        }) ?? [];
+        }) ?? [], 0, $limit);
     }
 
     public function profileReadmeHtml(): ?string
