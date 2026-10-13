@@ -105,6 +105,9 @@ class PortfolioViewTest extends TestCase
         $this->assertStringContainsString('Santa Rita do Sapucaí', $html);
         $this->assertStringContainsString('Seu programador, a um direct de distância.', $html);
         $this->assertStringContainsString('Seu programador. Por Nathan Luceat.', $html);
+        $this->assertStringContainsString('<small>Seu programador.</small>', $html);
+        $this->assertStringContainsString('Seu programador, no seu próximo projeto', $html);
+        $this->assertDoesNotMatchRegularExpression('/Seu\s+Luceat/i', $html);
         $this->assertStringContainsString('href="/curriculo"', $html);
         $this->assertStringContainsString('Quero entender o que seu negócio precisa', $html);
         $this->assertStringNotContainsString('Eu entro com o código —', $html);
