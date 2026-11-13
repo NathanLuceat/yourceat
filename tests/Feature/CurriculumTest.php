@@ -102,6 +102,8 @@ class CurriculumTest extends TestCase
             ->assertSee('rel="canonical" href="https://yourceat.laravel.cloud/curriculo"', false)
             ->assertSee('property="og:url" content="https://yourceat.laravel.cloud/curriculo"', false)
             ->assertSee('id="print-curriculum" hidden', false)
+            ->assertSee('id="curriculum-avatar"', false)
+            ->assertSee('https://avatars.githubusercontent.com/u/324915588?v=4&amp;s=96', false)
             ->assertSee('href="#curriculo"', false);
 
         $this->assertFileExists(public_path('css/curriculum.css'));

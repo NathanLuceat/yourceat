@@ -240,6 +240,18 @@ docker compose exec app php artisan config:clear
 
 O token é usado pelo servidor e não é enviado ao navegador. Os limites da API variam conforme a autenticação; o cache evita repetir consultas a cada visita. Um token inválido pode resultar em 401, mesmo para dados públicos.
 
+### Branch dos commits do Yourceat
+
+Por padrão, os commits vêm da branch padrão de cada repositório no GitHub, não necessariamente da branch publicada no Laravel Cloud. Para mostrar o trabalho do Yourceat em outra branch, configure **no ambiente do Yourceat**:
+
+```dotenv
+GITHUB_YOURCEAT_BRANCH=chore/organiza-portfolio-curriculo
+```
+
+Use o nome de uma branch existente. A opção afeta apenas os commits do repositório `yourceat`; os demais seguem suas branches padrão. A configuração tem cache separado por seleção de branches. Depois de alterar a variável no Cloud, aplique-a por deploy. Para voltar ao comportamento padrão, remova a variável e aplique novamente. Isso não faz merge, não publica arquivos e não muda a branch de deploy do Cloud. Uma branch inexistente não gera commits para esse repositório.
+
+Se preferir publicar apenas trabalho integrado, faça o pull request para `main` e mantenha essa variável ausente.
+
 ### Webblioteca
 
 A integração precisa de um token Sanctum com habilidade `activities:read`, emitido **no mesmo ambiente/banco da Webblioteca indicado na URL**.

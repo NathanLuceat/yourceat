@@ -20,7 +20,7 @@
 <body class="cv-page">
   <a class="skip-link" href="#curriculo">Pular para o currículo</a>
   <header class="site-header shell cv-navigation">
-    <a class="wordmark" href="/" aria-label="Yourceat, início"><span class="brand-photo" aria-hidden="true">NL</span><span>yourceat<small>Seu programador.</small></span></a>
+    <a class="wordmark" href="/" aria-label="Yourceat, início"><span class="brand-photo" aria-hidden="true">NL<img id="curriculum-avatar" src="https://avatars.githubusercontent.com/u/324915588?v=4&amp;s=96" alt="" width="48" height="48" referrerpolicy="no-referrer"></span><span>yourceat<small>Seu programador.</small></span></a>
     <div class="cv-actions">
       <a class="button button-outline" href="/">Voltar ao site</a>
       <button class="button button-primary" type="button" id="print-curriculum" hidden>Imprimir / salvar PDF</button>
