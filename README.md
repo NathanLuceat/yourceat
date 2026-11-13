@@ -1,6 +1,6 @@
 # Yourceat
 
-**Seu programador, a um direct de distância.** Meu portfólio de desenvolvimento: sites, catálogos, sistemas para processos e integrações. Uma apresentação do meu trabalho, com projetos do GitHub e atividades da [Webblioteca](https://webblioteca.laravel.cloud), um sistema de biblioteca que também desenvolvo.
+Portfólio profissional de **Nathan Luceat**, com foco em **desenvolvimento backend com PHP, Laravel e MySQL**. Além de apresentar projetos e currículo, a aplicação integra dados públicos do GitHub e atividades da [Webblioteca](https://github.com/NathanLuceat/webblioteca), meu sistema de biblioteca com empréstimos e reservas de salas.
 
 - **Site publicado:** [yourceat.laravel.cloud](https://yourceat.laravel.cloud)
 - **Currículo:** [yourceat.laravel.cloud/curriculo](https://yourceat.laravel.cloud/curriculo)
@@ -15,19 +15,97 @@ O projeto exercita o consumo de APIs reais, autenticação no servidor, cache, s
 - Repositórios públicos próprios, sem forks nem arquivados.
 - Até **nove commits**, organizados em uma grade de três colunas em telas largas.
 - As **seis atividades mais recentes recebidas** da Webblioteca, com consulta a cada 30 segundos enquanto a aba está visível. O histórico completo recebido permanece no banco.
-- Currículo independente das integrações, com estilos para imprimir ou salvar em PDF pelo navegador.
+- Currículo independente das integrações, com foco em backend PHP/Laravel, competências agrupadas, experiência profissional, projetos e três certificações do IFRS.
+- Impressão A4 em duas páginas na configuração validada do Chromium, com texto selecionável, links e fundo branco; a versão online também inclui Hidrauboa e ensino médio.
 
-## Stack
+## Stack verificada
 
-| Camada | Tecnologia |
+| Camada | Tecnologia e fonte |
 |---|---|
-| Backend | PHP 8.4 + Laravel 13 |
-| Banco local | MySQL 8 |
+| Backend | PHP 8.4 no `Dockerfile` e na CI; Laravel **13.35.0** no `composer.lock` |
+| Banco local | MySQL 8 no `docker-compose.yml`; persistência com Eloquent e migrations |
 | Servidor local | Nginx + PHP-FPM |
-| Ambiente local | Docker + Docker Compose |
+| Ambiente local | Docker + Docker Compose próprios, sem Laravel Sail |
 | Frontend | Blade, CSS e JavaScript puro |
-| Testes | PHPUnit, SQLite em memória e HTTP simulado |
+| Testes | PHPUnit **12.5.38** no lock, SQLite em memória e HTTP simulado |
+| CI | GitHub Actions em push e pull request |
 | Publicação | Laravel Cloud |
+
+As versões exatas acima são as do lock auditado; `composer.json` declara intervalos, não a versão instalada. O requisito declarado de PHP é `^8.3`, mas o ambiente documentado e a CI usam PHP 8.4. Sanctum pertence à **API da Webblioteca**: o Yourceat consome seu token no servidor, sem instalar Sanctum nem expor esse token no navegador.
+
+## Arquitetura e decisões de backend
+
+A aplicação segue a separação entre rotas, controllers, serviços de integração, persistência e apresentação Blade. Não depende de uma SPA nem de build de assets para servir o portfólio.
+
+| Caminho | Responsabilidade |
+|---|---|
+| `/` → `HomeController` → serviços → Blade | Consulta GitHub, tenta sincronizar a Webblioteca e renderiza as atividades armazenadas |
+| `GitHubService` + `GitHubCache` | Cache por proprietário e geração, fallback e leitura sob demanda de READMEs sanitizados |
+| `WebbliotecaService` → `WebbliotecaActivity` → MySQL | Valida lotes externos, usa cursor incremental e grava em transação com `external_id` único |
+| `/atividades` → `ActivitiesController` | Expõe somente dados de apresentação e cursor, sem identidade do ator ou credenciais |
+| `/webhooks/github` → `GitHubWebhookController` | Valida HMAC e lista autorizada; invalida cache sem fazer deploy ou buscar a API durante a entrega |
+| `webblioteca:sync` + scheduler | Reutiliza o mesmo serviço, cooldown e lock usados pelo fluxo HTTP |
+| `/curriculo` | Página independente das integrações, preparada para impressão pelo navegador |
+
+**Decisões exercitadas:** tolerância a falhas de serviços externos, cache com invalidação, importação incremental sem duplicar eventos, rollback de lotes inválidos, controle de concorrência, rate limiting e redução de dados pessoais. O MySQL mantém o histórico recebido; o navegador mostra apenas os seis eventos mais recentes. Os contratos e exemplos completos estão em [Entender o fluxo](#3-entender-o-fluxo-com-exemplos).
+
+## Testes e integração contínua
+
+A suíte usa SQLite em memória e chamadas HTTP simuladas, com bloqueio de requisições não previstas nos testes das integrações. Não exige tokens funcionais, não consome as APIs reais e não deve usar o banco MySQL de desenvolvimento. Testes aprovados não comprovam disponibilidade dos serviços externos nem substituem validação específica em MySQL.
+
+| Área | Cenários cobertos pelos testes |
+|---|---|
+| Sincronização e persistência | Validação de payload, rollback, cursor, repetição de lote, backlog, cooldown e propriedade do lock |
+| Endpoint de atividades | Paginação sem saltos, IDs grandes como strings e anonimização dos campos públicos |
+| GitHub e cache | Fallback, invalidação durante requisições, visibilidade pública, limites e sanitização de Markdown |
+| Webhooks | Assinatura do corpo bruto, lista autorizada, limites e exceção de CSRF restrita ao receptor |
+| Páginas e comando | Renderização sem dados externos, escape de conteúdo, currículo independente, códigos de saída e agenda |
+
+Após preparar o ambiente local, remova eventual configuração cacheada antes dos testes:
+
+```bash
+docker compose exec app php artisan config:clear
+docker compose exec -T \
+  -e APP_ENV=testing \
+  -e DB_CONNECTION=sqlite \
+  -e DB_DATABASE=:memory: \
+  -e DB_URL= \
+  -e CACHE_STORE=array \
+  -e SESSION_DRIVER=array \
+  app php artisan test
+```
+
+Para executar apenas os testes da view, use o mesmo ambiente isolado:
+
+```bash
+docker compose exec -T \
+  -e APP_ENV=testing \
+  -e DB_CONNECTION=sqlite \
+  -e DB_DATABASE=:memory: \
+  -e DB_URL= \
+  -e CACHE_STORE=array \
+  -e SESSION_DRIVER=array \
+  app php artisan test --filter PortfolioViewTest
+```
+
+O workflow [`.github/workflows/tests.yml`](.github/workflows/tests.yml) executa a suíte em push e pull request, com PHP 8.4, dependências do lock e uma chave temporária. Consulte a aba [Actions](https://github.com/NathanLuceat/yourceat/actions) para ver cada execução. O workflow não faz deploy nem configura proteção de branch. O repositório contém testes automatizados; este README não afirma uma contagem fixa nem um resultado atual de execução.
+
+## Projetos relacionados
+
+- **[Webblioteca](https://github.com/NathanLuceat/webblioteca):** sistema de biblioteca em Laravel e MySQL, com autenticação, empréstimos e reservas de salas. A API de atividades usa Sanctum com a habilidade `activities:read`; o projeto possui testes PHPUnit e ambiente Laravel Sail. É a origem do feed consumido pelo Yourceat.
+- **[Hidrauboa](https://github.com/NathanLuceat/hidrauboa-site):** site institucional com catálogo em TypeScript, Vite e Tailwind CSS. Usa links de atendimento para WhatsApp e mapa incorporado; não é uma API backend em PHP.
+
+Tecnologias conferidas nos manifests e fontes públicas dos projetos, não inferidas apenas das descrições do GitHub.
+
+## Guia operacional
+
+1. [Preparar o ambiente local](#1-preparar-o-ambiente-local)
+2. [Conectar as APIs](#2-conectar-as-apis)
+3. [Entender o fluxo, com exemplos](#3-entender-o-fluxo-com-exemplos)
+4. [Rotina de desenvolvimento](#4-rotina-de-desenvolvimento)
+5. [Configuração em produção](#5-configuração-em-produção)
+6. [Problemas comuns](#6-problemas-comuns)
+7. [Onde personalizar](#7-onde-personalizar)
 
 ## 1. Preparar o ambiente local
 
@@ -331,29 +409,7 @@ A expressão esperada é `0 * * * *` para `webblioteca:sync`. O fuso configurado
 
 ### Testar
 
-No ambiente local, remova eventual configuração cacheada antes dos testes:
-
-```bash
-docker compose exec app php artisan config:clear
-docker compose exec -T \
-  -e APP_ENV=testing \
-  -e DB_CONNECTION=sqlite \
-  -e DB_DATABASE=:memory: \
-  -e DB_URL= \
-  -e CACHE_STORE=array \
-  -e SESSION_DRIVER=array \
-  app php artisan test
-```
-
-A suíte usa SQLite em memória e chamadas HTTP simuladas. Não exige tokens funcionais, não consome as APIs reais e não deve usar o banco MySQL de desenvolvimento. Testes aprovados não comprovam disponibilidade dos serviços externos.
-
-Para executar apenas os testes da view:
-
-```bash
-docker compose exec -T app php artisan test --filter PortfolioViewTest
-```
-
-O workflow `.github/workflows/tests.yml` executa a suíte em push e pull request, com PHP 8.4, dependências do lock e uma chave temporária. Consulte a aba **Actions** para ver cada execução. O workflow não faz deploy nem configura proteção de branch.
+Os comandos da suíte completa e do filtro `PortfolioViewTest`, o isolamento do banco e os detalhes da CI estão em [Testes e integração contínua](#testes-e-integração-contínua), antes da instalação.
 
 ## 5. Configuração em produção
 
@@ -449,11 +505,14 @@ Execute somente se esse for o problema: em Linux/WSL, o bind mount também alter
 | Arquivo | Responsabilidade |
 |---|---|
 | `resources/views/home.blade.php` | Textos, serviços, contatos e estrutura do portfólio |
-| `resources/views/curriculo.blade.php` | Currículo e link de retorno ao site |
+| `config/curriculum.php` | Fonte dos dados profissionais, contatos, projetos, formação e certificações; resumo e contatos também usados na home |
+| `resources/views/curriculo.blade.php` | Apresentação do currículo e link de retorno ao site |
 | `resources/views/partials/project.blade.php` | Apresentação dos cases e módulos de documentação |
-| `public/css/portfolio.css` | Paleta, tipografia, responsividade e impressão do currículo |
+| `public/css/portfolio.css` | Paleta, tipografia e responsividade do portfólio |
+| `public/css/curriculum.css` | Estilos independentes do currículo, incluindo impressão |
 | `public/js/activities.js` | Polling e limite visual de seis atividades |
 | `public/js/projects.js` | Carregamento sob demanda dos READMEs |
+| `public/js/curriculum.js` | Ativação progressiva do botão de impressão; o documento continua legível sem JavaScript |
 | `app/Services/GitHubService.php` | Consultas GitHub, cache e limite de commits |
 | `app/Support/GitHubCache.php` | Gerações de cache por proprietário |
 | `app/Services/WebbliotecaService.php` | Validação e sincronização dos eventos |
@@ -461,6 +520,14 @@ Execute somente se esse for o problema: em Linux/WSL, o bind mount também alter
 | `routes/console.php` | Agenda horária |
 | `routes/web.php` | Páginas, endpoints JSON e webhook |
 | `.github/workflows/tests.yml` | Testes no GitHub Actions |
+
+### Atualizar o currículo e as certificações
+
+Edite `config/curriculum.php` para atualizar os dados estáticos, sem banco adicional nem consultas externas na rota `/curriculo`. Mantenha o nome oficial dos cursos, instituição, carga horária e data conforme os documentos. As três certificações cadastradas são cursos livres do IFRS: Backend com PHP e MySQL (30 h), PHP para Iniciantes (30 h) e Banco de Dados 1 (20 h), concluídos em novembro de 2026.
+
+Os PDFs originais contêm dados pessoais e **não fazem parte do repositório**. São publicados apenas os metadados necessários; códigos, QR codes e documentos originais não devem ser copiados para `public/`. `validation_url` fica `null` enquanto não houver um destino HTTPS oficial conferido e seguro, que não exponha dados pessoais desnecessários. Sem esse destino, a interface não exibe um link artificial.
+
+Para revisar a impressão, abra `/curriculo` e use **Imprimir / salvar PDF** ou `Ctrl + P`, formato A4, escala padrão e sem cabeçalhos/rodapés do navegador. O CSS não depende de gráficos de fundo. A versão impressa preserva experiências, competências, formação superior, Webblioteca, Yourceat, três certificações, conquistas e idiomas. Hidrauboa e ensino médio permanecem na versão online. A paginação pode variar entre navegadores; revise o PDF após mudanças de conteúdo. Execute também os testes `CurriculumTest` e `PortfolioViewTest` no ambiente isolado documentado acima.
 
 As fontes Fraunces e Figtree vêm do Bunny Fonts; há fontes locais de fallback. Avatar e imagens da documentação também podem vir de provedores externos. As credenciais das APIs permanecem no servidor.
 

@@ -32,6 +32,10 @@ class PortfolioViewTest extends TestCase
     {
         $this->portfolio()
             ->assertSee('Nathan Luceat')
+            ->assertSee(config('curriculum.title'))
+            ->assertSee('Sisponto Sistemas Inteligentes')
+            ->assertSee('consultas SQL')
+            ->assertDontSee('Desenvolvimento full-stack')
             ->assertSee('problemas são ouro!')
             ->assertSee('Os projetos não estão disponíveis nesta consulta.')
             ->assertSee('Sem commits disponíveis nesta consulta.')
