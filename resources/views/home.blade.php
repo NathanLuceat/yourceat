@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Seu programador, a um direct de distância. Nathan Luceat desenvolve sites, catálogos e sistemas sob medida. Boa Esperança, Santa Rita do Sapucaí e região, com abertura para novos lugares.">
+  <meta name="description" content="Nathan Luceat, desenvolvedor backend com PHP, Laravel e MySQL. Projetos web, APIs REST e suporte técnico. Estudante de Engenharia de Software no Inatel.">
   <meta name="theme-color" content="#141816">
   <title>Nathan Luceat | Seu programador | Yourceat</title>
   <link rel="stylesheet" href="https://fonts.bunny.net/css?family=figtree:400,500,600,700|fraunces:400,500,600,700&amp;display=swap">
@@ -31,14 +31,14 @@
   <main id="conteudo">
     <section id="perfil" class="hero shell" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="byline">Nathan Luceat <span>Desenvolvimento full-stack</span></p>
+        <p class="byline">{{ config('curriculum.professional_name') }} <span>{{ config('curriculum.title') }}</span></p>
         <h1 id="hero-title">Seu programador, a um direct de distância.</h1>
         <p class="hero-intro">Quero entender o que seu negócio precisa e desenvolver uma solução que faça sentido na prática, seja um site, um sistema ou a melhoria de um processo.</p>
         <div class="actions">
           <a class="button button-primary" href="https://www.instagram.com/nathanluceat/">Vamos conversar no Instagram</a>
           <a class="button button-outline" href="#projetos">Conheça meus projetos</a>
         </div>
-        <p class="hero-footnote">Boa Esperança, Santa Rita do Sapucaí e região.<br>De Minas, com vontade de expandir fronteiras.</p>
+        <p class="hero-footnote">{{ config('curriculum.location') }}.<br>De Minas, com vontade de expandir fronteiras.</p>
       </div>
       <aside class="maker-note" aria-label="Quem vai construir com você">
         <div class="portrait-frame">
@@ -71,9 +71,11 @@
       <div class="about">
         <div><p class="section-caption">Quem está do outro lado</p><h2 id="about-title">Entender primeiro.<br>Construir com propósito.</h2></div>
         <div class="about-story">
-          <p>Sou Nathan Luceat, estudante de Engenharia de Software no Inatel. Minha prática em programação começou há mais de cinco anos, entre estudos, projetos próprios e competições desde o ensino fundamental.</p>
-          <p>Hoje trabalho com suporte técnico na Sisponto Sistemas Inteligentes e desenvolvo landing pages como freelancer. Gosto de aproximar o lado técnico das necessidades de quem usa o sistema.</p>
-          <p>Atuo em Boa Esperança, Santa Rita do Sapucaí e região, e busco expandir minhas fronteiras. Podemos conversar em português ou inglês, inclusive à distância.</p>
+          @foreach (config('curriculum.summary') as $paragraph)
+            <p>{{ $paragraph }}</p>
+          @endforeach
+          <p>Trabalho com suporte técnico na {{ config('curriculum.experience.0.organization') }}. Estou em {{ config('curriculum.location') }} e também desenvolvo projetos à distância.</p>
+          <a class="text-link" href="{{ route('curriculo', [], false) }}">Experiência, competências e certificações</a>
         </div>
       </div>
       <div id="readme" class="readme-panel">
@@ -140,11 +142,11 @@
 
     <section id="contato" class="contact-section" aria-labelledby="contact-title">
       <div class="shell contact-inner">
-        <div><p class="section-caption">Seu programador, no seu próximo projeto</p><h2 id="contact-title">Qual problema<br>vamos resolver?</h2><p>Me conte sobre seu negócio, sua ideia e o que precisa funcionar melhor. A primeira conversa é para entender o que podemos construir juntos.</p><p class="contact-region">Boa Esperança, Santa Rita do Sapucaí e região.<br>Aberto a novos lugares e projetos à distância.</p></div>
+        <div><p class="section-caption">Seu programador, no seu próximo projeto</p><h2 id="contact-title">Qual problema<br>vamos resolver?</h2><p>Me conte sobre seu negócio, sua ideia e o que precisa funcionar melhor. A primeira conversa é para entender o que podemos construir juntos.</p><p class="contact-region">{{ config('curriculum.location') }}.<br>Aberto a novos lugares e projetos à distância.</p></div>
         <div class="contact-links">
           <a class="contact-primary" href="https://www.instagram.com/nathanluceat/"><span>Converse comigo no Instagram</span><strong>@nathanluceat</strong><span class="contact-invite">Meu principal canal de contato</span></a>
-          <a href="mailto:nathanluceat@gmail.com"><span>E-mail</span><strong>nathanluceat@gmail.com</strong></a>
-          <a href="https://wa.me/5535988933911"><span>WhatsApp</span><strong>+55 (35) 98893-3911</strong></a>
+          <a href="mailto:{{ config('curriculum.email') }}"><span>E-mail</span><strong>{{ config('curriculum.email') }}</strong></a>
+          <a href="{{ config('curriculum.whatsapp') }}"><span>WhatsApp</span><strong>{{ config('curriculum.phone') }}</strong></a>
         </div>
       </div>
     </section>

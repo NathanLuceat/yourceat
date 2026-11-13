@@ -31,6 +31,9 @@ return [
         'username' => env('GITHUB_USERNAME'),
         'token' => env('GITHUB_TOKEN'),
         'cache_ttl' => (int) env('GITHUB_CACHE_TTL', 300),
+        'commit_branches' => array_filter([
+            'yourceat' => env('GITHUB_YOURCEAT_BRANCH'),
+        ]),
         'webhook_secret' => env('GITHUB_WEBHOOK_SECRET', ''),
         'webhook_repositories' => array_values(array_filter(array_map('trim', explode(',', env('GITHUB_WEBHOOK_REPOSITORIES', ''))))),
     ],

@@ -161,6 +161,27 @@ class GitHubCacheTest extends TestCase
         $this->assertSame(array_slice($old, 0, 9), $failingService->recentCommits());
     }
 
+    public function test_commit_branch_override_is_scoped_and_has_separate_cache(): void
+    {
+        $this->fakeProject([
+            'https://api.github.com/repos/Owner/demo/commits*' => Http::response([[
+                'sha' => str_repeat('a', 40),
+                'commit' => ['message' => 'Branch commit', 'author' => ['date' => '2026-11-13T12:00:00Z']],
+                'html_url' => 'https://github.com/Owner/demo/commit/aaaaaaa',
+            ]]),
+        ]);
+        $cache = app(GitHubCache::class);
+        Cache::put($cache->key('Owner', $cache->generation('Owner'), 'commits'), [['message' => 'Default branch']]);
+        config(['services.github.commit_branches' => ['demo' => 'feature/curriculum']]);
+
+        $this->assertSame('Branch commit', app(GitHubService::class)->recentCommits()[0]['message']);
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/demo/commits')
+            && $request['sha'] === 'feature/curriculum' && $request['author'] === 'Owner');
+
+        config(['services.github.commit_branches' => []]);
+        $this->assertSame('Default branch', app(GitHubService::class)->recentCommits()[0]['message']);
+    }
+
     private function fakeProject(array $overrides = []): void
     {
         Http::fake(array_replace([

@@ -54,15 +54,20 @@ class GitHubService
 
     public function recentCommits(int $repos = 4, int $limit = 9): array
     {
-        return array_slice($this->cached('commits', function () use ($repos, $limit) {
+        $branches = config('services.github.commit_branches', []);
+        $cacheKey = $branches === [] ? 'commits' : 'commits:'.hash('sha256', json_encode($branches));
+
+        return array_slice($this->cached($cacheKey, function () use ($repos, $limit, $branches) {
             return collect($this->repos())->take($repos)
-                ->flatMap(function ($repo) {
+                ->flatMap(function ($repo) use ($branches) {
                     if (! $this->isPublic($repo['name'])) {
                         return [];
                     }
-                    $res = $this->request("/repos/{$this->user}/{$repo['name']}/commits", [
-                        'author' => $this->user, 'per_page' => 5,
-                    ]);
+                    $query = ['author' => $this->user, 'per_page' => 5];
+                    if (! empty($branches[$repo['name']])) {
+                        $query['sha'] = $branches[$repo['name']];
+                    }
+                    $res = $this->request("/repos/{$this->user}/{$repo['name']}/commits", $query);
 
                     // repositório vazio (409) ou erro isolado não derruba a lista toda
                     return $res->successful()
